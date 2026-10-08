@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>AI Image Classifier</title>
+
+  <!-- Teachable Machine Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 650px;
+      background: white;
+      border-radius: 20px;
+      padding: 30px;
+      text-align: center;
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25);
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      color: #777;
+      margin-bottom: 25px;
+    }
+
+    #webcam-container {
+      display: flex;
+      justify-content: center;
+      margin: 20px 0;
+    }
+
+    #webcam-container canvas {
+      width: 300px !important;
+      height: 300px !important;
+      border-radius: 15px;
+      border: 4px solid #667eea;
+      background: #eee;
+    }
+
+    button {
+      border: none;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      padding: 14px 28px;
+      font-size: 17px;
+      font-weight: bold;
+      border-radius: 30px;
+      cursor: pointer;
+      transition: 0.3s;
+      margin: 8px;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    button:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    #status {
+      margin: 20px 0;
+      color: #555;
+      font-size: 15px;
+    }
+
+    #label-container {
+      margin-top: 20px;
+      text-align: left;
+    }
+
+    .prediction {
+      margin: 12px 0;
+    }
+
+    .prediction-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    .progress {
+      width: 100%;
+      height: 14px;
+      background: #eee;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      border-radius: 10px;
+      transition: width 0.3s ease;
+    }
+
+    .result {
+      margin-top: 25px;
+      padding: 20px;
+      background: #f5f7ff;
+      border-radius: 15px;
+      border: 2px solid #667eea;
+    }
+
+    .result h2 {
+      color: #667eea;
+      margin-bottom: 8px;
+    }
+
+    .result p {
+      color: #444;
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    .footer {
+      margin-top: 25px;
+      color: #999;
+      font-size: 13px;
+    }
+
+    @media (max-width: 500px) {
+      .container {
+        padding: 20px;
+      }
+
+      #webcam-container canvas {
+        width: 260px !important;
+        height: 260px !important;
+      }
+
+      h1 {
+        font-size: 26px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+
+    <h1>🤖 AI Image Classifier</h1>
+
+    <p class="subtitle">
+      Powered by Teachable Machine
+    </p>
+
+    <button id="startButton" onclick="init()">
+      📷 Start Camera
+    </button>
+
+    <button id="stopButton" onclick="stopCamera()" disabled>
+      ⛔ Stop Camera
+    </button>
+
+    <div id="status">
+      Click "Start Camera" to begin.
+    </div>
+
+    <div id="webcam-container"></div>
+
+    <div class="result">
+      <h2>Prediction</h2>
+      <p id="mainPrediction">Waiting for camera...</p>
+    </div>
+
+    <div id="label-container"></div>
+
+    <div class="footer">
+      Created using Teachable Machine
+    </div>
+
+  </div>
+
+  <script>
+    // Your Teachable Machine model
+    const MODEL_URL =
+      "https://teachablemachine.withgoogle.com/models/bpLBcGbUb/";
+
+    let model;
+    let webcam;
+    let maxPredictions;
+    let running = false;
+
+    // Start the model and webcam
+    async function init() {
+
+      try {
+        document.getElementById("status").innerText =
+          "Loading AI model...";
+
+        document.getElementById("startButton").disabled = true;
+
+        // Load model
+        const modelURL = MODEL_URL + "model.json";
+        const metadataURL = MODEL_URL + "metadata.json";
+
+        model = await tmImage.load(modelURL, metadataURL);
+
+        maxPredictions = model.getTotalClasses();
+
+        // Create webcam
+        const flip = true;
+
+        webcam = new tmImage.Webcam(300, 300, flip);
+
+        await webcam.setup();
+        await webcam.play();
+
+        running = true;
+
+        document.getElementById("webcam-container")
+          .appendChild(webcam.canvas);
+
+        document.getElementById("status").innerText =
+          "Camera is running. Show an object to the camera.";
+
+        document.getElementById("stopButton").disabled = false;
+
+        // Create prediction areas
+        createPredictionBoxes();
+
+        // Start prediction loop
+        window.requestAnimationFrame(loop);
+
+      } catch (error) {
+
+        console.error(error);
+
+        document.getElementById("status").innerText =
+          "Unable to access the camera or load the model.";
+
+        document.getElementById("startButton").disabled = false;
+
+        alert(
+          "Camera access is required. Please allow camera permission and try again."
+        );
+      }
+    }
+
+    // Prediction loop
+    async function loop() {
+
+      if (!running) {
+        return;
+      }
+
+      webcam.update();
+
+      await predict();
+
+      window.requestAnimationFrame(loop);
+    }
+
+    // Make predictions
+    async function predict() {
+
+      const prediction = await model.predict(webcam.canvas);
+
+      let highestProbability = 0;
+      let bestClass = "";
+
+      for (let i = 0; i < maxPredictions; i++) {
+
+        const className = prediction[i].className;
+        const probability = prediction[i].probability;
+
+        const percentage =
+          (probability * 100).toFixed(1);
+
+        // Update progress bar
+        const bar =
+          document.getElementById("bar-" + i);
+
+        const percentageText =
+          document.getElementById("percentage-" + i);
+
+        if (bar) {
+          bar.style.width = percentage + "%";
+        }
+
+        if (percentageText) {
+          percentageText.innerText =
+            percentage + "%";
+        }
+
+        // Find highest prediction
+        if (probability > highestProbability) {
+
+          highestProbability = probability;
+          bestClass = className;
+        }
+      }
+
+      // Display best prediction
+      document.getElementById("mainPrediction").innerText =
+        bestClass +
+        " (" +
+        (highestProbability * 100).toFixed(1) +
+        "%)";
+    }
+
+    // Create prediction bars
+    function createPredictionBoxes() {
+
+      const container =
+        document.getElementById("label-container");
+
+      container.innerHTML = "";
+
+      for (let i = 0; i < maxPredictions; i++) {
+
+        container.innerHTML += `
+          <div class="prediction">
+
+            <div class="prediction-header">
+              <span id="class-${i}">
+                Class ${i + 1}
+              </span>
+
+              <span id="percentage-${i}">
+                0%
+              </span>
+            </div>
+
+            <div class="progress">
+              <div
+                id="bar-${i}"
+                class="progress-bar"
+                style="width: 0%">
+              </div>
+            </div>
+
+          </div>
+        `;
+      }
+
+      // Get actual class names from model
+      const classNames = model.getClassLabels();
+
+      for (let i = 0; i < classNames.length; i++) {
+
+        document.getElementById("class-" + i)
+          .innerText = classNames[i];
+      }
+    }
+
+    // Stop camera
+    function stopCamera() {
+
+      running = false;
+
+      if (webcam) {
+        webcam.stop();
+        webcam.canvas.remove();
+      }
+
+      document.getElementById("status").innerText =
+        "Camera stopped.";
+
+      document.getElementById("mainPrediction").innerText =
+        "Camera stopped.";
+
+      document.getElementById("startButton").disabled = false;
+      document.getElementById("stopButton").disabled = true;
+    }
+  </script>
+
+</body>
+</html>
